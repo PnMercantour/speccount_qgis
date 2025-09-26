@@ -1,0 +1,103 @@
+name: Deploy QGIS Plugin
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Check metadata version against tag
+        run: |
+          META_VERSION=$(grep "^version=" metadata.txt | cut -d'=' -f2)
+          TAG_VERSION=${GITHUB_REF_NAME#v}
+
+          echo "metadata.txt: $META_VERSION"
+          echo "git tag: $TAG_VERSION"
+
+          if [ "$META_VERSION" != "$TAG_VERSION" ]; then
+            echo "Version mismatch between metadata.txt and git tag"
+            exit 1
+          fi
+
+          echo "VERSION=$META_VERSION" >> $GITHUB_ENV
+
+      - name: Rename repo folder to match plugin name
+        run: |
+          cd $GITHUB_WORKSPACE
+          mkdir speccount
+          shopt -s extglob
+          mv !(speccount) speccount/
+          zip -r speccount.${VERSION}.zip speccount
+          ls
+
+      - name: Start ssh-agent
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+            ssh-private-key: ${{ secrets.SERVER_SSH_KEY }}
+
+      - name: Deploy to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          overwrite: true
+          source: speccount.${{ env.VERSION }}.zip
+          target: "/var/www/qgis-plugins/"
+
+
+      - name: Fetch plugins.xml from server
+        run: |
+            scp -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/var/www/qgis-plugins/plugins.xml plugins.xml
+
+
+      - name: Update plugin version in plugins.xml
+        run: |
+            python - <<EOF
+            import xml.etree.ElementTree as ET
+            import os
+
+            PLUGIN_NAME = "Speccount"
+            VERSION = "${{ env.VERSION }}"
+            DOWNLOAD_URL = f"https://${{ secrets.SERVER_HOST }}/speccount.{VERSION}.zip"
+
+            with open("speccount/metadata.txt") as f:
+                for line in f:
+                    if line.startswith("version="):
+                        VERSION = line.strip().split("=")[1]
+
+            tree = ET.parse("plugins.xml")
+            root = tree.getroot()
+
+            # Cherche le plugin existant
+            plugin_elem = None
+            for plugin in root.findall("pyqgis_plugin"):
+                if plugin.attrib.get("name") == PLUGIN_NAME:
+                    plugin_elem = plugin
+                    break
+
+            # Si le plugin n’existe pas, on le crée
+            # Met à jour la version
+            plugin_elem.set("version", VERSION)
+            download_url_elem = plugin_elem.find("download_url")
+            download_url_elem.text = DOWNLOAD_URL
+
+            tree.write("plugins.xml", encoding="utf-8", xml_declaration=True)
+            EOF
+
+      - name: Deploy to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+            host: ${{ secrets.SERVER_HOST }}
+            username: ${{ secrets.SERVER_USER }}
+            key: ${{ secrets.SERVER_SSH_KEY }}
+            overwrite: true
+            source: "plugins.xml"
+            target: "/var/www/qgis-plugins/"
