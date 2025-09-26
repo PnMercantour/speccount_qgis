@@ -1,0 +1,17 @@
+[general]
+name=Speccount
+qgisMinimumVersion=3.0
+description=Plugin pour le comptage du nombre d'observations de taxons pour un rang taxonomique donné
+version=1.0.0
+author=Quentin - Parc National du Mercantour
+email=quentin.vintras@mercantour-parcnational.fr
+
+about=Ce plugin permet de traiter plusieurs couches vectorielles simultanément pour compter les espèces à partir de la base taxonomique TAXREF. Il offre une interface simplifiée avec sélection multiple des couches et traitement en lot.
+
+tracker=
+repository=
+tags=taxref,biodiversité,espèces,comptage,multi-couches
+category=Vector
+icon=icon.png
+experimental=False
+deprecated=False
