@@ -22,6 +22,11 @@ Le plugin **Speccount** permet de traiter plusieurs couches vectorielles simulta
 
 ## Installation
 
+### Installation depuis le depot de plugins QGIS du Parc National du Mercantour (Recommandé)
+
+- Si le dépôt QGIS du Parc National du Mercantour n'est pas configuré dans QGIS suivre [la procédure d'installation](https://pnmercantour.github.io/donnees/tutos/installation_plugin_via_depot/)
+- Dans QGIS allez dans **Extensions** → **Installer/Gérer les extensions**, dans l'onglet **Toutes**, recherchez l'extension Speccount puis cliquez sur **Installer**
+
 ### Installation depuis un fichier ZIP
 
 1. Téléchargez le plugin au format ZIP
@@ -30,7 +35,7 @@ Le plugin **Speccount** permet de traiter plusieurs couches vectorielles simulta
 4. Sélectionnez le fichier ZIP du plugin
 5. Cliquez sur **Installer l'extension**
 
-### A venir --> Installation depuis le depot de plugins QGIS du Parc National du Mercantour
+
 
 ## Prérequis
 
@@ -152,4 +157,5 @@ speccount_plugin/
 - Ouverture automatique du dossier de sortie
 
 ### TODO
-- Gestion de certaines taxons importants qu'on ne veut pas faire remonter (exemple de sous-espèces de plantes qu'on veut compter comme des espèces)
+- Mettre au propre le module speccount_multi.py, en particulier séparer la partie interface graphique / retour utilisateur de la partie calculs.
+- Eventuellement repenser l'accès et la mise à jour de la base taxref (à l'heure actuelle, le chargement de taxref prend environ 2 secondes)

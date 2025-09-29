@@ -7,12 +7,11 @@ from qgis.PyQt.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
                                 QListWidget, QLabel, QComboBox, QProgressBar,
                                 QListWidgetItem, QAbstractItemView, QMessageBox,
                                 QGroupBox, QTableWidget, QTableWidgetItem,
-                                QHeaderView)
-from qgis.PyQt.QtCore import Qt
+                                QHeaderView, QCheckBox, QFileDialog, QDialogButtonBox)
+from qgis.PyQt.QtCore import Qt, QMetaType
 from qgis.core import (QgsProject, QgsVectorLayer, QgsFeature, QgsFields, QgsField,
-                      QgsMessageLog, Qgis, QgsVectorFileWriter)
-from qgis.gui import QgsFileWidget
-from qgis.PyQt.QtCore import QMetaType
+                      QgsMessageLog, Qgis, QgsVectorFileWriter, QgsMapLayerProxyModel)
+from qgis.gui import QgsMapLayerComboBox, QgsFileWidget
 from .utils import (get_cd_ref_from_cd_nom, get_tri_rang, get_taxsup)
 from functools import reduce
 import pandas as pd
@@ -43,7 +42,8 @@ class ResultsSummaryDialog(QDialog):
         self.results_table = QTableWidget()
         headers = [
             "Couche d'entrée", 
-            "Couche de sortie", 
+            "Couche de sortie",
+            "Nb observations" 
             "Nb espèces", 
             "Nb imprécis", 
             "Nb sans correspondance",
@@ -58,14 +58,15 @@ class ResultsSummaryDialog(QDialog):
             if isinstance(result_info, dict):  # Traitement réussi
                 self.results_table.setItem(row, 0, QTableWidgetItem(input_layer))
                 self.results_table.setItem(row, 1, QTableWidgetItem(result_info['output_layer_name']))
-                self.results_table.setItem(row, 2, QTableWidgetItem(str(result_info['species_count'])))
-                self.results_table.setItem(row, 3, QTableWidgetItem(str(result_info['imprecis_count'])))
-                self.results_table.setItem(row, 4, QTableWidgetItem(str(result_info['no_matching_rank_count'])))
-                
+                self.results_table.setItem(row, 2, QTableWidgetItem(str(result_info['num_observations'])))
+                self.results_table.setItem(row, 3, QTableWidgetItem(str(result_info['species_count'])))
+                self.results_table.setItem(row, 4, QTableWidgetItem(str(result_info['imprecis_count'])))
+                self.results_table.setItem(row, 5, QTableWidgetItem(str(result_info['no_matching_rank_count'])))
+
                 output_file = result_info.get('output_path', 'Couche temporaire')
                 if output_file and output_file != 'Couche temporaire':
                     output_file = os.path.basename(output_file)
-                self.results_table.setItem(row, 5, QTableWidgetItem(output_file))
+                self.results_table.setItem(row, 6, QTableWidgetItem(output_file))
             else:  # Erreur
                 self.results_table.setItem(row, 0, QTableWidgetItem(input_layer))
                 self.results_table.setItem(row, 1, QTableWidgetItem("ERREUR"))
@@ -87,9 +88,11 @@ class ResultsSummaryDialog(QDialog):
         total_species = sum(r['species_count'] for r in successful_treatments)
         total_imprecis = sum(r['imprecis_count'] for r in successful_treatments)
         total_no_match = sum(r['no_matching_rank_count'] for r in successful_treatments)
+        total_observations = sum(r['num_observations'] for r in successful_treatments)
         
         stats_text = f"""
         Couches traitées avec succès : {len(successful_treatments)} / {len(self.results_data)}
+        Nombre d'observations totales traitées : {total_observations}
         Total espèces trouvées : {total_species}
         Total observations imprécises : {total_imprecis}
         Total observations sans correspondance : {total_no_match}
@@ -189,7 +192,8 @@ class SpecCountMultiDialog(QDialog):
         self.cd_nom_combo.setEditable(True)
         self.cd_nom_combo.addItems(["cd_nom", "CD_NOM", "taxon_id", "espece_id"])
         param_layout.addWidget(self.cd_nom_combo)
-        
+    
+
         # Rang taxonomique
         param_layout.addWidget(QLabel("Rang taxonomique souhaité :"))
         self.rank_combo = QComboBox()
@@ -209,6 +213,11 @@ class SpecCountMultiDialog(QDialog):
         self.rank_combo.addItems(rank_choices)
         self.rank_combo.setCurrentText('Espèce (Species)')
         param_layout.addWidget(self.rank_combo)
+
+        self.setup_advanced_taxon_ui()
+        self.advanced_taxons_button = QPushButton("Gestion avancée des taxons importants...")
+        self.advanced_taxons_button.clicked.connect(self.advanced_taxon_dialog_open)
+        param_layout.addWidget(self.advanced_taxons_button)
         
         # Option de sauvegarde
         self.folder_widget = QgsFileWidget()
@@ -266,7 +275,100 @@ class SpecCountMultiDialog(QDialog):
         button_layout.addWidget(self.process_btn)
         button_layout.addWidget(self.close_btn)
         layout.addLayout(button_layout)
-        
+
+    def setup_advanced_taxon_ui(self):
+        """Créer l'interface utilisateur pour la gestion avancée des taxons importants."""
+        self.advanced_taxon_dialog = QDialog(self)
+        self.advanced_taxon_dialog.setWindowTitle("Gestion avancée des taxons importants")
+        self.advanced_taxon_dialog.rejected.connect(self.advanced_taxon_dialog_reject)
+
+        layout = QVBoxLayout(self.advanced_taxon_dialog)
+        layout.addWidget(QLabel("Sélectionner la couche contenant les cd_noms des taxons à ne pas faire remonter :"))
+
+        # Combo box avec les couches QGIS existantes        
+        self.adv_taxon_combo_layer = QgsMapLayerComboBox()
+        self.adv_taxon_combo_layer.setToolTip("Sélectionnez une couche existante ou chargez un CSV")
+        self.adv_taxon_combo_layer.setAllowEmptyLayer(True)
+        self.adv_taxon_combo_layer.setLayer(None)
+        self.adv_taxon_combo_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
+        layout.addWidget(self.adv_taxon_combo_layer)
+
+        # Bouton pour charger une nouvelle couche CSV
+        layout.addWidget(QLabel("Ou sélectionnez un CSV :"))
+        self.load_csv_btn = QPushButton("Charger un CSV…")
+        self.load_csv_btn.clicked.connect(self.load_csv_layer)
+        layout.addWidget(self.load_csv_btn)
+
+        self.adv_taxon_field_combo = QComboBox()
+        self.adv_taxon_field_combo.setEnabled(False)  # désactivée tant qu’aucune couche
+        layout.addWidget(QLabel("Champ identifiant taxonomique :"))
+        layout.addWidget(self.adv_taxon_field_combo)
+        self.adv_taxon_combo_layer.layerChanged.connect(self.popuplate_adv_taxon_fields)
+
+        self.adv_taxon_force_ascent = QCheckBox("Remonter quand même les observations de taxons importants jusqu'au rang taxonomique demandé")
+        self.adv_taxon_force_ascent.setToolTip("Si coché, les observations des taxons importants seront comptés pour le taxon important et seront " \
+        "tout de même remontées jusqu'au rang demandé. Ainsi si le taxon important est une sous-espèce et que le rang demandé est espèce, " \
+        "les observations seront comptées pour la sous-espèce et pour l'espèce.")
+        self.adv_taxon_force_ascent.setChecked(False)
+        layout.addWidget(self.adv_taxon_force_ascent)
+
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.buttons.rejected.connect(self.advanced_taxon_dialog.rejected)
+        self.buttons.accepted.connect(self.advanced_taxon_dialog_accept)
+        layout.addWidget(self.buttons)
+
+    def popuplate_adv_taxon_fields(self, layer):
+        self.adv_taxon_field_combo.clear()
+        if not layer or not layer.isValid():
+            self.adv_taxon_field_combo.setEnabled(False)
+            return
+
+        self.adv_taxon_field_combo.setEnabled(True)
+
+        # Récupérer tous les champs
+        fields = [f.name() for f in layer.fields()]
+
+        # Trier : mettre en premier celui qui ressemble à 'cd_nom'
+        fields_sorted = sorted(fields, key=lambda x: 0 if "cd_nom" in x.lower() else 1)
+
+        self.adv_taxon_field_combo.addItems(fields_sorted)
+        self.adv_taxon_field_combo.setCurrentIndex(0)
+
+    def advanced_taxon_dialog_reject(self):
+        self.advanced_taxon_dialog.close()
+        self.adv_taxon_combo_layer.setLayer(None)
+
+    def advanced_taxon_dialog_accept(self):
+        self.advanced_taxon_dialog.accept()
+
+    def advanced_taxon_dialog_open(self):
+        """Ouvrir la boîte de dialogue pour la gestion avancée des taxons importants."""
+        self.advanced_taxon_dialog.open()
+
+    def load_csv_layer(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Sélectionner un fichier CSV",
+            "",
+            "Fichiers CSV (*.csv);;Tous les fichiers (*.*)"
+        )
+        if not file_path:
+            return
+
+        # Charger le CSV comme couche vecteur (délimité)
+        uri = f"file:///{file_path}?type=csv&detectTypes=yes&geomType=none&subsetIndex=no&watchFile=no"
+        layer = QgsVectorLayer(uri, file_path.split("/")[-1], "delimitedtext")
+
+        if not layer.isValid():
+            QMessageBox.critical(self, "Erreur", "Impossible de charger le fichier CSV.")
+            return
+
+        # Ajouter la couche au projet → elle apparaît dans le combo automatiquement
+        QgsProject.instance().addMapLayer(layer)
+
+        # Sélectionner automatiquement cette couche dans le combo
+        self.adv_taxon_combo_layer.setLayer(layer)
+
     def load_data(self):
         """Charger les données TAXREF."""
         if self.taxref_df is not None and self.taxrank_df is not None:
@@ -381,10 +483,42 @@ class SpecCountMultiDialog(QDialog):
             if item.checkState() == Qt.Checked:
                 selected_fields.append(item.text())
         return selected_fields
-        
+    
+
+    def get_advanced_taxons_options(self):
+        """Récupérer les cd_ref à conserver même si leur rang taxonomique est inférieur à au rang demandé. 
+        (Exemple de sous espèces importantes à conserver dans la listes des espèces présentes), charge un 
+        csv avec des cd_nom ou cd_ref ou bien lit un champ d'une couche donnée, on a aussi une case à cocher
+        pour savoir si on s'arrête de remonter quand on trouve un cd_ref à conserver ou si on conserve ce cd_ref
+        mais on continue de remonter les observations dans la hiérarchie taxonomique."""
+        layer = self.adv_taxon_combo_layer.currentLayer()
+        cd_nom_field = self.adv_taxon_field_combo.currentText()
+        if layer is None:
+            return [], self.adv_taxon_force_ascent.isChecked()
+        else:
+            if cd_nom_field not in [field.name() for field in layer.fields()]:
+                QMessageBox.critical(self, "Erreur", f"Le champ '{cd_nom_field}' n'existe pas dans la couche des taxons importants.")
+                return [], self.adv_taxon_force_ascent.isChecked()
+            cd_noms = []
+            for feature in layer.getFeatures():
+                cd_nom = feature[cd_nom_field]
+                if cd_nom is not None:
+                    try:
+                        cd_noms.append(int(cd_nom))
+                    except (ValueError, TypeError):
+                        continue
+            if not cd_noms:
+                QMessageBox.warning(self, "Attention", "Aucun identifiant taxonomique valide trouvé dans la couche des taxons importants. Vérifiez la couche et le champ sélectionné.")
+                return [], self.adv_taxon_force_ascent.isChecked()
+            # Convertir les cd_nom en cd_ref
+            taxref_subset = self.taxref_df[self.taxref_df['cd_nom'].isin(cd_noms)]
+            cd_refs = taxref_subset['cd_ref'].unique().tolist()
+            return cd_refs, self.adv_taxon_force_ascent.isChecked()
+
     def process_layers(self):
         """Traiter les couches sélectionnées."""
         selected_layers = self.get_selected_layers()
+        self.important_taxons, self.force_ascent = self.get_advanced_taxons_options()
         
         if not selected_layers:
             QMessageBox.warning(self, "Attention", "Veuillez sélectionner au moins une couche.")
@@ -476,12 +610,8 @@ class SpecCountMultiDialog(QDialog):
         
         condition_rank = obs_ref['tri_rang'] >= wanted_rank
         nb_imprecis = len(obs_ref[~condition_rank])
-        # feedback.pushInfo(f'Nombre d\'observations imprécises : {nb_imprecis} ' + 
-        #                  f'({round(100*nb_imprecis/len(obs_ref),2)}%)')
 
         obs_ref = obs_ref[condition_rank]
-        num_obs_to_classify = len(obs_ref)
-        # feedback.pushInfo(f'Nombre d\'observations à classer : {num_obs_to_classify}')
 
         # Comptage par niveau taxonomique
         value_counts = []
@@ -491,9 +621,13 @@ class SpecCountMultiDialog(QDialog):
             no_matching_rank = obs_ref['tri_rang'] < wanted_rank
             no_matching_rank_num += no_matching_rank.sum()
             obs_ref = obs_ref[~no_matching_rank]
-            condition_rank = obs_ref['tri_rang'] == wanted_rank
-            value_counts.append(obs_ref[condition_rank].value_counts('cd_ref'))
-            obs_ref = obs_ref[~condition_rank]
+            condition_rank = (obs_ref['tri_rang'] == wanted_rank)
+            condition_taxon = (obs_ref['cd_ref'].isin(self.important_taxons))
+            value_counts.append(obs_ref[(condition_rank) | (condition_taxon)].value_counts('cd_ref'))
+            if not self.force_ascent:
+                obs_ref = obs_ref[~(condition_rank | condition_taxon)]
+            else:
+                obs_ref = obs_ref[~condition_rank]
             # feedback.pushInfo(f'Reste {len(obs_ref)} observations à traiter')
             obs_ref = get_tri_rang(get_taxsup(obs_ref, self.taxref_df), self.taxrank_df)
         
@@ -586,66 +720,6 @@ class SpecCountMultiDialog(QDialog):
             'imprecis_count': nb_imprecis,
             'no_matching_rank_count': no_matching_rank_num,
             'output_layer_name': output_layer_name,
-            'output_path': output_path
+            'output_path': output_path,
+            'num_observations': len(obs_df)
         }
-
-
-class SpeccountMultiPlugin:
-    """Plugin principal pour le comptage multi-couches."""
-    
-    def __init__(self, iface):
-        self.iface = iface
-        self.plugin_dir = os.path.dirname(__file__)
-        self.actions = []
-        self.menu = 'Speccount Multi'
-        self.toolbar = self.iface.addToolBar('Speccount Multi')
-        self.toolbar.setObjectName('Speccount Multi')
-        
-    def add_action(self, icon_path, text, callback, enabled_flag=True,
-                  add_to_menu=True, add_to_toolbar=True, status_tip=None,
-                  whats_this=None, parent=None):
-        """Ajouter une action à la barre d'outils et au menu."""
-        from qgis.PyQt.QtWidgets import QAction
-        from qgis.PyQt.QtGui import QIcon
-        
-        icon = QIcon(icon_path) if icon_path else QIcon()
-        action = QAction(icon, text, parent)
-        action.triggered.connect(callback)
-        action.setEnabled(enabled_flag)
-
-        if status_tip:
-            action.setStatusTip(status_tip)
-        if whats_this:
-            action.setWhatsThis(whats_this)
-
-        if add_to_toolbar:
-            self.toolbar.addAction(action)
-        if add_to_menu:
-            self.iface.addPluginToMenu(self.menu, action)
-
-        self.actions.append(action)
-        return action
-        
-    def initGui(self):
-        """Créer les éléments de l'interface graphique."""
-        icon_path = os.path.join(self.plugin_dir, 'icon.png')
-        
-        self.add_action(
-            icon_path,
-            text="Comptage Multi-couches",
-            callback=self.run_multi_count,
-            parent=self.iface.mainWindow(),
-            status_tip="Lancer le comptage sur plusieurs couches"
-        )
-        
-    def unload(self):
-        """Supprime le plugin du menu et de la barre d'outils."""
-        for action in self.actions:
-            self.iface.removePluginMenu('Speccount Multi', action)
-            self.iface.removeToolBarIcon(action)
-        del self.toolbar
-        
-    def run_multi_count(self):
-        """Lance la boîte de dialogue de comptage multi-couches."""
-        dialog = SpecCountMultiDialog(self.iface.mainWindow())
-        dialog.exec_()

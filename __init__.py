@@ -5,5 +5,5 @@ Permet de traiter plusieurs couches en une seule fois avec une interface simplif
 
 def classFactory(iface):
     """Charge le plugin SpeccountMulti"""
-    from .speccount_multi import SpeccountMultiPlugin
+    from .plugin import SpeccountMultiPlugin
     return SpeccountMultiPlugin(iface)
