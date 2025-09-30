@@ -61,7 +61,7 @@ jobs:
       - name: Update plugin version in plugins.xml
         run: |
             python - <<EOF
-            import xml.etree.ElementTree as ET
+            from lxml import etree
             import os
 
             PLUGIN_NAME = "Speccount"
@@ -73,7 +73,7 @@ jobs:
                     if line.startswith("version="):
                         VERSION = line.strip().split("=")[1]
 
-            tree = ET.parse("plugins.xml")
+            tree = etree.parse("plugins.xml")
             root = tree.getroot()
 
             # Cherche le plugin existant
@@ -88,8 +88,9 @@ jobs:
             plugin_elem.set("version", VERSION)
             download_url_elem = plugin_elem.find("download_url")
             download_url_elem.text = DOWNLOAD_URL
-
-            tree.write("plugins.xml", encoding="utf-8", xml_declaration=True)
+            pi = etree.ProcessingInstruction("xml-stylesheet", "type='text/xsl' href='plugins.xsl'")
+            tree.getroot().addprevious(pi)  # Ajoute avant la racine
+            tree.write("plugins.xml", encoding="utf-8", xml_declaration=True, pretty_print=True)
             EOF
 
       - name: Deploy to server

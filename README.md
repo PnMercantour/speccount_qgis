@@ -22,9 +22,9 @@ Le plugin **Speccount** permet de traiter plusieurs couches vectorielles simulta
 
 ## Installation
 
-### Installation depuis le depot de plugins QGIS du Parc National du Mercantour (Recommandé)
+### Installation depuis le depot de plugins QGIS du Parc national du Mercantour (Recommandé)
 
-- Si le dépôt QGIS du Parc National du Mercantour n'est pas configuré dans QGIS suivre [la procédure d'installation](https://pnmercantour.github.io/donnees/tutos/installation_plugin_via_depot/)
+- Si le dépôt QGIS du Parc national du Mercantour n'est pas configuré dans QGIS suivre [la procédure d'installation](https://pnmercantour.github.io/donnees/tutos/installation_plugin_via_depot/)
 - Dans QGIS allez dans **Extensions** → **Installer/Gérer les extensions**, dans l'onglet **Toutes**, recherchez l'extension Speccount puis cliquez sur **Installer**
 
 ### Installation depuis un fichier ZIP
