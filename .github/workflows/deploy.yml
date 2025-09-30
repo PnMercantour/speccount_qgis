@@ -57,6 +57,10 @@ jobs:
         run: |
             scp -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/var/www/qgis-plugins/plugins.xml plugins.xml
 
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install lxml
 
       - name: Update plugin version in plugins.xml
         run: |
