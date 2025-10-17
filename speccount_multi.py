@@ -43,7 +43,7 @@ class ResultsSummaryDialog(QDialog):
         headers = [
             "Couche d'entrée", 
             "Couche de sortie",
-            "Nb observations" 
+            "Nb observations",
             "Nb espèces", 
             "Nb imprécis", 
             "Nb sans correspondance",
@@ -485,6 +485,51 @@ class SpecCountMultiDialog(QDialog):
         return selected_fields
     
 
+    def create_matching_layer(self, matchings, input_layer_name):
+        """Créer une couche de correspondance entre observations originales et taxons finaux."""
+        if not matchings:
+            return
+            
+        # Concaténer tous les DataFrames de matchings
+        all_matchings = pd.concat(matchings, ignore_index=True)
+        
+        # Supprimer les doublons
+        unique_matchings = all_matchings.drop_duplicates()
+        
+        if unique_matchings.empty:
+            return
+            
+        # Créer la couche de correspondance
+        matching_layer_name = f"{input_layer_name}_correspondances"
+        
+        # Définir les champs
+        fields = QgsFields()
+        fields.append(QgsField('index', QMetaType.Int))
+        fields.append(QgsField('cd_ref', QMetaType.Int))
+        fields.append(QgsField('tri_rang', QMetaType.Int))
+        
+        # Créer la couche
+        matching_layer = QgsVectorLayer("None", matching_layer_name, "memory")
+        matching_layer.dataProvider().addAttributes(fields)
+        matching_layer.updateFields()
+        
+        # Ajouter les features
+        features = []
+        for _, row in unique_matchings.iterrows():
+            feature = QgsFeature()
+            feature.setFields(fields)
+            feature.setAttribute('index', int(row['index']))
+            feature.setAttribute('cd_ref', int(row['cd_ref']))
+            feature.setAttribute('tri_rang', int(row['tri_rang']))
+            features.append(feature)
+            
+        matching_layer.dataProvider().addFeatures(features)
+        
+        # Ajouter la couche au projet
+        QgsProject.instance().addMapLayer(matching_layer)
+        
+        QgsMessageLog.logMessage(f"Couche de correspondance créée : {matching_layer_name}", "Speccount", Qgis.Info)
+
     def get_advanced_taxons_options(self):
         """Récupérer les cd_ref à conserver même si leur rang taxonomique est inférieur à au rang demandé. 
         (Exemple de sous espèces importantes à conserver dans la listes des espèces présentes), charge un 
@@ -602,7 +647,9 @@ class SpecCountMultiDialog(QDialog):
         if not cd_noms:
             raise Exception("Aucun identifiant taxonomique valide trouvé")
             
-        obs_df = pd.DataFrame({cd_nom_field: cd_noms})
+        if cd_nom_field == 'cd_ref':
+            cd_nom_field = 'cd_nom'  # pour que get_cd_ref_from_cd_nom fonctionne correctement
+        obs_df = pd.DataFrame({cd_nom_field: cd_noms}).reset_index(drop=False, names='index')
 
         # Traitement taxonomique
         # feedback.pushInfo('Traitement taxonomique...')
@@ -616,6 +663,7 @@ class SpecCountMultiDialog(QDialog):
         # Comptage par niveau taxonomique
         value_counts = []
         no_matching_rank_num = 0
+        matchings = []
 
         while len(obs_ref) > 0:
             no_matching_rank = obs_ref['tri_rang'] < wanted_rank
@@ -624,6 +672,7 @@ class SpecCountMultiDialog(QDialog):
             condition_rank = (obs_ref['tri_rang'] == wanted_rank)
             condition_taxon = (obs_ref['cd_ref'].isin(self.important_taxons))
             value_counts.append(obs_ref[(condition_rank) | (condition_taxon)].value_counts('cd_ref'))
+            matchings.append(obs_ref[(condition_rank) | (condition_taxon)][["index", "cd_ref",'tri_rang']])
             if not self.force_ascent:
                 obs_ref = obs_ref[~(condition_rank | condition_taxon)]
             else:
@@ -639,6 +688,10 @@ class SpecCountMultiDialog(QDialog):
                           right_on='cd_nom', 
                           how='left')
         final_df = final_df.rename({0:'count'})
+        
+        # Créer la couche de correspondance
+        if False: # désactivé pour l'instant mais ajouter une option pour l'activer ou une app séparée pour sortir toutes les observations de départ avec le taxon remonté
+            self.create_matching_layer(matchings, layer.name())
 
         # Joindre avec taxrank pour obtenir les rangs        
         # Créer la couche de résultats

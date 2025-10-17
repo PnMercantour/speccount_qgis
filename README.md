@@ -156,6 +156,14 @@ speccount_plugin/
 - Export optionnel en CSV
 - Ouverture automatique du dossier de sortie
 
+### Version 1.1.0
+- Gestion des taxons importants
+
+### Version 1.1.1
+- Correction de bugs au niveau de l'affichage
+- Correction d'un bug si le champ contenant les cd_nom est nommé cd_ref
+
+
 ### TODO
 - Mettre au propre le module speccount_multi.py, en particulier séparer la partie interface graphique / retour utilisateur de la partie calculs.
 - Eventuellement repenser l'accès et la mise à jour de la base taxref (à l'heure actuelle, le chargement de taxref prend environ 2 secondes)

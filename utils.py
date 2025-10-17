@@ -47,13 +47,13 @@ def get_taxsup(obs_df: pd.DataFrame, taxon_table: pd.DataFrame) -> pd.DataFrame:
                           how='left', suffixes=('','_sup'))
     
     if 'cd_nom' in obs_df.columns:
-        obs_sup = obs_sup[['cd_ref_sup', 'cd_nom_sup','cd_taxsup_sup','id_rang_sup']].rename(
+        obs_sup = obs_sup[['cd_ref_sup', 'cd_nom_sup','cd_taxsup_sup','id_rang_sup', 'index']].rename(
             columns={'cd_ref_sup':'cd_ref',
                     'cd_nom_sup':'cd_nom',
                     'cd_taxsup_sup':'cd_taxsup', 
                     'id_rang_sup':'id_rang'})
     else:
-        obs_sup = obs_sup[['cd_ref_sup', 'cd_nom','cd_taxsup_sup','id_rang_sup']].rename(
+        obs_sup = obs_sup[['cd_ref_sup', 'cd_nom','cd_taxsup_sup','id_rang_sup', 'index']].rename(
             columns={'cd_ref_sup':'cd_ref',
                     'cd_taxsup_sup':'cd_taxsup', 
                     'id_rang_sup':'id_rang'})
