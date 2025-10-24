@@ -163,6 +163,8 @@ speccount_plugin/
 - Correction de bugs au niveau de l'affichage
 - Correction d'un bug si le champ contenant les cd_nom est nommé cd_ref
 
+### Version 1.2.1
+- Ajout de la possibilité de sortir le mapping taxon d'origine vers taxon rang demandé dans un fichier excel (permet de savoir combien de sous-espèces différentes sont mappés sur une même espèce, ou bien de savoir si on a à la fois dans nos observations l'espèce et la sous espèce)
 
 ### TODO
 - Mettre au propre le module speccount_multi.py, en particulier séparer la partie interface graphique / retour utilisateur de la partie calculs.
